@@ -87,26 +87,36 @@ jobs:
       - name: Интеграционные тесты (pytest в стадии test)
         run: |
           set -o pipefail
-          {
-            echo; echo "--- docker build --target test ---"
-            docker build --target test -t task-tracker-api:test .
-            echo; echo "--- pytest ---"
-            docker run --rm --network task-tracker-net \
-              -e DATABASE_URL=postgresql+psycopg://task_user:task_pass@db:5432/taskdb \
-              task-tracker-api:test
-          } 2>&1 | tee -a ci/run.log
+          echo; echo "--- docker build --target test ---" | tee -a ci/run.log
+          docker build --target test -t task-tracker-api:test . 2>&1 | tee -a ci/run.log
+          echo; echo "--- pytest ---" | tee -a ci/run.log
+          rc=0
+          docker run --rm --network task-tracker-net \
+            -e DATABASE_URL=postgresql+psycopg://task_user:task_pass@db:5432/taskdb \
+            task-tracker-api:test 2>&1 | tee ci/pytest.log | tee -a ci/run.log || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            msg=$(tail -c 900 ci/pytest.log | sed 's/%/%25/g; s/::/:/g' | tr '\n' '|')
+            echo "::error title=pytest-exit-$rc::$msg"
+            exit 1
+          fi
 
       - name: Тесты Postman-коллекции (Newman)
         run: |
           set -o pipefail
-          {
-            echo; echo "--- newman run ---"
-            npx --yes newman@6 run postman/task-tracker.postman_collection.json \
-              -e postman/task-tracker.postman_environment.json \
-              --reporters cli,json,junit \
-              --reporter-json-export newman/report.json \
-              --reporter-junit-export newman/report.xml
-          } 2>&1 | tee -a ci/run.log
+          mkdir -p newman
+          echo; echo "--- newman run ---" | tee -a ci/run.log
+          rc=0
+          npx --yes newman@6 run postman/task-tracker.postman_collection.json \
+            -e postman/task-tracker.postman_environment.json \
+            --reporters cli,json,junit \
+            --reporter-json-export newman/report.json \
+            --reporter-junit-export newman/report.xml \
+            2>&1 | tee ci/newman.log | tee -a ci/run.log || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            msg=$(tail -c 900 ci/newman.log | sed 's/%/%25/g; s/::/:/g' | tr '\n' '|')
+            echo "::error title=newman-exit-$rc::$msg"
+            exit 1
+          fi
 
       - name: Содержимое таблицы tasks после тестов
         if: always()

@@ -34,12 +34,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=test
 
 WORKDIR /app
-COPY requirements.txt requirements-dev.txt ./
+COPY requirements.txt requirements-dev.txt pytest.ini ./
 RUN pip install -r requirements-dev.txt
 COPY app ./app
 COPY tests ./tests
 
-CMD ["pytest", "-q"]
+CMD ["python", "-m", "pytest", "-q"]
 
 # ------------------------------------------------------------------ runtime
 FROM python:${PYTHON_VERSION}-slim AS runtime
