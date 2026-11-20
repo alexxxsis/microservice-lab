@@ -14,6 +14,8 @@ jobs:
   compose-and-test:
     name: docker compose + pytest + Postman
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -157,5 +159,5 @@ jobs:
             echo "Журнал не изменился"
           else
             git commit -m "CI: журнал прогона (${{ github.run_number }}) [skip ci]"
-            git push
+            git push origin HEAD:main || echo "не удалось отправить журнал в репозиторий"
           fi
