@@ -122,7 +122,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          { echo; echo "--- docker compose logs api ---"; docker compose logs --no-color api | tail -n 80; } 2>&1 | tee -a ci/run.log || true
+          { echo; echo "--- docker compose logs api ---"; docker compose logs --no-color api | tail -n 12; } 2>&1 | tee -a ci/run.log || true
 
       - name: Выгрузка отчётов
         if: always()
@@ -143,7 +143,7 @@ jobs:
       - name: Аннотация с концом журнала
         if: always()
         run: |
-          tail -c 4000 ci/run.log > /tmp/tail.txt
+          tail -c 14000 ci/run.log > /tmp/tail.txt
           total=$(wc -c < /tmp/tail.txt)
           offset=0
           idx=0
