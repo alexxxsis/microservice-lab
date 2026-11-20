@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-and-test:
+    name: docker compose + pytest + Postman
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Версии инструментов
+        run: |
+          docker --version
+          docker compose version
+          node --version
+
+      - name: Проверка docker-compose.yml
+        run: docker compose config --quiet && echo "compose OK"
+
+      - name: Сборка multi-stage образа
+        run: docker compose build
+
+      - name: Запуск микросервиса и PostgreSQL
+        run: docker compose up -d
+
+      - name: Ожидание готовности API
+        run: |
+          set -e
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health/live >/dev/null 2>&1; then
+              echo "health/live отвечает (попытка $i)"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/health | tee /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json
+
+      - name: Состояние контейнеров
+        run: |
+          docker compose ps
+          docker compose images
+
+      - name: Интеграционные тесты (pytest в стадии test)
+        run: |
+          set -e
+          docker build --target test -t task-tracker-api:test .
+          docker run --rm --network task-tracker-net \
+            -e DATABASE_URL=postgresql+psycopg://task_user:task_pass@db:5432/taskdb \
+            task-tracker-api:test
+
+      - name: Тесты Postman-коллекции (Newman)
+        run: |
+          set -e
+          mkdir -p newman
+          npx --yes newman@6 run postman/task-tracker.postman_collection.json \
+            -e postman/task-tracker.postman_environment.json \
+            --reporters cli,json,junit \
+            --reporter-json-export newman/report.json \
+            --reporter-junit-export newman/report.xml
+
+      - name: Содержимое таблицы tasks после тестов
+        if: always()
+        run: |
+          docker compose exec -T db \
+            psql -U task_user -d taskdb -c "SELECT id, title, status, priority FROM tasks ORDER BY id;"
+
+      - name: Логи API
+        if: always()
+        run: docker compose logs --no-color api | tail -n 60
+
+      - name: Выгрузка отчётов
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: newman/
+          if-no-files-found: ignore
+
+      - name: Остановка
+        if: always()
+        run: docker compose down -v

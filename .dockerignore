@@ -1,0 +1,13 @@
+# Контекст сборки: всё лишнее исключаем, чтобы образ собирался быстро.
+.git
+.gitignore
+.github
+.deps
+.env
+.env.example
+__pycache__
+*.py[cod]
+.pytest_cache
+newman
+docs
+*.md

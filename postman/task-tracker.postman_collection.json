@@ -1,0 +1,1110 @@
+{
+  "info": {
+    "_postman_id": "4a45eedd-2cb8-45f6-9bde-ded184b9ea2e",
+    "name": "Task Tracker API",
+    "description": "Коллекция для проверки микросервиса Task Tracker API (FastAPI + PostgreSQL, docker compose).\n\nПорядок запуска: `docker compose up -d --build`, затем Run Collection.\nПеременные: `baseUrl`, `taskId`, `conflictId` — заполняются автоматически.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 · Служебные эндпоинты",
+      "item": [
+        {
+          "name": "01 · Проверка живости (health/live)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Процесс сервиса запущен (используется в Docker HEALTHCHECK)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Поле body.status', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"ok\");",
+                  "});",
+                  "pm.test('Поле body.service', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.service).to.eql(\"task-tracker-api\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 · Проверка готовности (health + БД)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Сервис отвечает и соединение с PostgreSQL установлено."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Поле body.database', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.database).to.eql(\"taskdb\");",
+                  "});",
+                  "pm.test('Версия сервера PostgreSQL', function () {",
+                  "    pm.expect(pm.response.json().server_version).to.include('PostgreSQL');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 · Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "docs"
+              ]
+            },
+            "description": "Интерактивная документация Swagger (опциональное требование)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Отдаётся HTML Swagger UI', function () {",
+                  "    pm.expect(pm.response.text()).to.include('swagger');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 · Схема OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi.json"
+              ]
+            },
+            "description": "Машиночитаемое описание API."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('В схеме есть CRUD-пути', function () {",
+                  "    const paths = Object.keys(pm.response.json().paths);",
+                  "    pm.expect(paths).to.include('/api/v1/tasks');",
+                  "    pm.expect(paths).to.include('/api/v1/tasks/{task_id}');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Health-check и документация"
+    },
+    {
+      "name": "02 · Задачи: CRUD",
+      "item": [
+        {
+          "name": "05 · Создать задачу (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Создание задачи. Название уникально, поэтому в тело подставляется динамическая переменная {{$timestamp}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Задача из Postman {{$timestamp}}\",\n  \"description\": \"Создано из коллекции Postman\",\n  \"status\": \"todo\",\n  \"priority\": \"high\",\n  \"due_date\": \"2026-12-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('taskId', body.id);",
+                  "pm.test('Ответ содержит id и статус todo', function () {",
+                  "    pm.expect(body.id).to.be.a('number');",
+                  "    pm.expect(body.status).to.eql('todo');",
+                  "    pm.expect(body.priority).to.eql('high');",
+                  "});",
+                  "pm.test('Заголовок Location указывает на созданный ресурс', function () {",
+                  "    pm.expect(pm.response.headers.get('Location')).to.eql('/api/v1/tasks/' + body.id);",
+                  "});",
+                  "pm.test('Вернулся request_id', function () {",
+                  "    pm.expect(pm.response.headers.get('X-Request-ID')).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 · Получить задачу по id (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "description": "Чтение созданной задачи."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('id совпадает с созданным', function () {",
+                  "    pm.expect(String(body.id)).to.eql(pm.collectionVariables.get('taskId'));",
+                  "});",
+                  "pm.test('Название не пустое', function () {",
+                  "    pm.expect(body.title).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 · Список задач с фильтрами (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?status=todo&priority=high&limit=5&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "todo"
+                },
+                {
+                  "key": "priority",
+                  "value": "high"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Постраничная выдача с фильтрами и поиском."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Постраничный ответ', function () {",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.limit).to.eql(5);",
+                  "    pm.expect(body.offset).to.eql(0);",
+                  "    pm.expect(body.total).to.be.a('number');",
+                  "});",
+                  "pm.test('Все задачи соответствуют фильтру', function () {",
+                  "    body.items.forEach((task) => {",
+                  "        pm.expect(task.status).to.eql('todo');",
+                  "        pm.expect(task.priority).to.eql('high');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 · Поиск по названию (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?search=Postman&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Postman"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Фильтр search ищет подстроку в названии (ILIKE)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Найденные задачи содержат искомую подстроку', function () {",
+                  "    pm.response.json().items.forEach((task) => {",
+                  "        pm.expect(task.title.toLowerCase()).to.include('postman');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 · Частично обновить задачу (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "description": "Меняем только статус и приоритет, остальные поля сохраняются.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"done\",\n  \"priority\": \"medium\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Статус изменился на done', function () {",
+                  "    pm.expect(body.status).to.eql('done');",
+                  "});",
+                  "pm.test('Описание не потерялось при частичном обновлении', function () {",
+                  "    pm.expect(body.description).to.eql('Создано из коллекции Postman');",
+                  "});",
+                  "pm.test('updated_at обновился', function () {",
+                  "    pm.expect(new Date(body.updated_at).getTime()).to.be.at.least(new Date(body.created_at).getTime());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 · Статистика по задачам (GET /stats)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "stats"
+              ]
+            },
+            "description": "Агрегация выполняется в PostgreSQL."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Есть счётчики по статусам и приоритетам', function () {",
+                  "    pm.expect(body.total).to.be.a('number');",
+                  "    pm.expect(Object.keys(body.by_status)).to.include.members(['todo', 'in_progress', 'done']);",
+                  "    pm.expect(body.overdue).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 · Удалить задачу (DELETE)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "description": "Удаление задачи, ответ без тела."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "pm.test('Тело ответа пустое', function () {",
+                  "    pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 · Проверить, что задача удалена (GET 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "description": "После удаления ресурс недоступен."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Код ошибки TASK_NOT_FOUND', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('TASK_NOT_FOUND');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Основные операции с задачами"
+    },
+    {
+      "name": "03 · Обработка ошибок",
+      "item": [
+        {
+          "name": "13 · Ошибка валидации: короткое название (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Минимальная длина названия — 3 символа.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"ab\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 422', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Код ошибки VALIDATION_ERROR', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('Указано проблемное поле', function () {",
+                  "    pm.expect(pm.response.json().error.details[0].field).to.eql('title');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 · Ошибка валидации: неизвестное поле (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Лишние поля запрещены (extra=forbid).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Корректное название\",\n  \"unknown_field\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 422', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Код ошибки VALIDATION_ERROR', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 · Ошибка валидации: недопустимый статус (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "status допускает только todo | in_progress | done.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Некорректный статус\",\n  \"status\": \"waiting\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 422', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Код ошибки VALIDATION_ERROR', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 · Ошибка валидации параметра запроса (422)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?limit=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "limit должен быть в диапазоне 1..100."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 422', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Код ошибки VALIDATION_ERROR', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17 · Ошибка валидации пути (422)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/not-a-number",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "not-a-number"
+              ]
+            },
+            "description": "Идентификатор задачи должен быть целым числом."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 422', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Код ошибки VALIDATION_ERROR', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 · Битый JSON в теле запроса (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Синтаксическая ошибка JSON — код 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"битый json\"",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Код ошибки INVALID_JSON', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('INVALID_JSON');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 · Несуществующая задача (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "999999999"
+              ]
+            },
+            "description": "Задачи с таким id нет."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Код ошибки TASK_NOT_FOUND', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('TASK_NOT_FOUND');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20 · Удаление несуществующей задачи (404)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "999999999"
+              ]
+            },
+            "description": "DELETE тоже возвращает 404, а не 500."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Код ошибки TASK_NOT_FOUND', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('TASK_NOT_FOUND');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21 · Конфликт: создать задачу для проверки (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Первая задача с уникальным названием — успех.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Конфликт названий {{conflictTitle}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('conflictTitle', 'conf-' + Math.random().toString(36).slice(2, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('conflictId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "22 · Конфликт: повторное название (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "UNIQUE-ограничение в БД превращается в понятную ошибку 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Конфликт названий {{conflictTitle}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Код ошибки CONFLICT', function () {",
+                  "    pm.expect(pm.response.json().error.code).to.eql('CONFLICT');",
+                  "});",
+                  "pm.test('Есть сопроводительное сообщение', function () {",
+                  "    pm.expect(pm.response.json().error.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "23 · Уборка: удалить задачу конфликта (204)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{conflictId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{conflictId}}"
+              ]
+            },
+            "description": "Чистим за собой, чтобы коллекцию можно было прогонять повторно."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP-код 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Проверка кодов 400/404/409/422"
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "taskId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conflictId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conflictTitle",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Локальные секреты
+.env
+
+# Артефакты локального прогона и тестов
+.deps/
+.pytest_cache/
+.coverage
+htmlcov/
+newman/
+*.log
