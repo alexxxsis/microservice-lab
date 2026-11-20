@@ -14,8 +14,6 @@ jobs:
   compose-and-test:
     name: docker compose + pytest + Postman
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
@@ -140,24 +138,18 @@ jobs:
           set -o pipefail
           { echo; echo "--- docker compose down ---"; docker compose down -v; } 2>&1 | tee -a ci/run.log || true
 
-      # Журнал прогона коммитится в репозиторий, чтобы результат был воспроизводим
-      # и доступен без доступа к веб-интерфейсу Actions.
-      - name: Сохранить журнал прогона в репозиторий
+      # Диагностика без доступа к веб-интерфейсу: конец журнала выводится
+      # аннотациями (они видны на странице прогона).
+      - name: Аннотация с концом журнала
         if: always()
         run: |
-          {
-            echo
-            echo "================================================================"
-            echo "Итог прогона: ${{ job.status }}"
-            echo "Время:        $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "================================================================"
-          } >> ci/run.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ci/run.log
-          if git diff --cached --quiet; then
-            echo "Журнал не изменился"
-          else
-            git commit -m "CI: журнал прогона (${{ github.run_number }}) [skip ci]"
-            git push origin HEAD:main || echo "не удалось отправить журнал в репозиторий"
-          fi
+          tail -c 4000 ci/run.log > /tmp/tail.txt
+          total=$(wc -c < /tmp/tail.txt)
+          offset=0
+          idx=0
+          while [ "$offset" -lt "$total" ]; do
+            part=$(tail -c +$((offset + 1)) /tmp/tail.txt | head -c 950 | sed 's/%/%25/g; s/::/:/g' | tr '\n' '|')
+            echo "::error title=CI-TAIL-$idx::${part}"
+            offset=$((offset + 950))
+            idx=$((idx + 1))
+          done
